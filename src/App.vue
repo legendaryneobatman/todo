@@ -1,14 +1,15 @@
 <script>
 
 const FILTERS_MAP = {
-  all: {label: 'Все', value: 'id'},
-  active: {label: 'Активные', value: 'active'},
-  completed: {label: 'Завершенные', value: 'completed'},
+  all: {label: 'Все', filterHandler: () => true},
+  active: {label: 'Активные', filterHandler: (el) => el.active},
+  completed: {label: 'Завершенные', filterHandler: (el) => !el.active},
 }
 export default {
+  name: 'App',
   data() {
     return {
-      todo: [],
+      todoList: [],
       activeFilter: FILTERS_MAP.all,
       search: null,
       filters: FILTERS_MAP,
@@ -16,62 +17,36 @@ export default {
     };
   },
   computed: {
-    filteredTodos() {
-      return this.todo
-          .filter(todo => todo[this.activeFilter.value])
-          .filter(({text}) => {
-            if (!this.search) return true;
-            return text.includes(this.search);
-          })
+    filteredTodoList() {
+      return this.todoList.filter(todo =>
+          this.activeFilter.filterHandler(todo) &&
+          (!this.search || todo.text.includes(this.search))
+      )
     },
   },
   mounted() {
-    if (this.search) {
-      this.search.focus();
-    }
-    fetch("https://my-json-server.typicode.com/falk20/demo/todos")
-        .then((response) => {
-          return response.json();
-        })
-        .then((data) => {
-          this.todo = data.map(el => ({
-            ...el,
-            completed: false,
-          }))
-        })
+    if (this.search) this.search.focus();
+  },
+  async created () {
+    this.todoList =  (await (
+        await fetch("https://my-json-server.typicode.com/falk20/demo/todos")
+    ).json())
   },
   methods: {
     createTodo() {
-      const newTodo = {
-        id: Date.now(),
+      this.todoList.push({
+        id: Date.now().toString(),
         text: this.newTodoText,
-        active: false,
-      };
-      this.todo.push(newTodo);
+        active: true,
+      });
 
       this.newTodoText = '';
     },
-    remove(todo) {
-      this.todo = [...this.todo.filter(({id}) => id !== todo.id)]
+    onRemoveTodo(item) {
+      this.todoList = this.todoList.filter(({id}) => id !== item.id)
     },
-    changeTodoField (todo, key, value) {
-      this.todo = [...this.todo].map(el => {
-        if (el.id === todo.id) {
-          return {
-            ...el,
-            [key]: value
-          }
-        }
-        return el;
-      });
-    },
-    toggleTodoField (todo, key) {
-      this.todo = [...this.todo].map(el => {
-        return {
-          ...el,
-          [key]: el.id === todo.id
-        };
-      });
+    onTodoComplete (item) {
+      this.todoList = this.todoList.map((el) => item.id === el.id ? {...el, active: !el.active} : el)
     },
     setActiveFilter(filterKey) {
       this.activeFilter = this.filters[filterKey]
@@ -94,21 +69,27 @@ export default {
       </label>
       <label class="flex flex-col gap-2">
         Фильтры
-        <button v-for="(filter, filterKey) in filters" :key="filterKey" @click="setActiveFilter(filterKey)">{{ filter.label }}</button>
+        <button
+            v-for="(filter, filterKey) in filters" :key="filterKey"
+            @click="setActiveFilter(filterKey)"
+            :class="filter.label === activeFilter.label && 'border-2 border-solid'"
+        >
+          {{ filter.label }}
+        </button>
       </label>
     </div>
 
     <div class="flex flex-col gap-4">
       <div
-          class="rounded border-gray-500 border-solid border-2 p-4"
-          :class="item.active && 'border-red-500'"
-          v-for="item in filteredTodos"
+          class="flex items-center gap-4 relative rounded border-gray-500 border-solid border-2 p-4"
+          :class="[!item.active && 'opacity-25']"
+          v-for="item in filteredTodoList"
           :key="item.id"
-          @click="toggleTodoField(item, 'active')"
       >
-        <input :value="item.completed" type="checkbox" @change="changeTodoField(item, 'completed', !Boolean(item.completed))">
+        <div v-if="!item.active" class="absolute after:content-[``] border-b-[1px] border-black border-solid w-full left-0 top-1/2 -translate-y-1/2 pointer-events-none"/>
+        <input :checked="!item.active" type="checkbox" @change="onTodoComplete(item)">
         {{ item.text }}
-        <button v-on:click="remove(item)">delete</button>
+        <button class="ml-auto" v-on:click="onRemoveTodo(item)">delete</button>
       </div>
     </div>
   </div>
